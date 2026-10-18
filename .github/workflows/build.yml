@@ -101,25 +101,52 @@ jobs:
           tail -n 2 drivers/Makefile
           grep -n "kernelsu" drivers/Kconfig
 
-      - name: Patch 4.19 compat (MODULE_IMPORT_NS)
+      - name: Patch 4.19 compat (SukiSU-Ultra)
         working-directory: kernel/msm-4.19
         run: |
           set -e
+          echo "== 1) MODULE_IMPORT_NS =="
           # Linux 4.19 没有 symbol-namespace 机制，MODULE_IMPORT_NS 宏不存在。
-          # SukiSU-Ultra 的 core/init.c 无条件使用它，会报：
-          #   error: a parameter list without types is only allowed in a function definition
-          # 在 module.h 末尾补一个 no-op 定义（#ifndef 包裹，重复包含安全）。
+          # SukiSU core/init.c 无条件使用它 -> 报
+          #   "a parameter list without types is only allowed in a function definition"
           HDR=include/linux/module.h
           if grep -Eq 'define[[:space:]]+MODULE_IMPORT_NS' "$HDR"; then
-            echo "module.h 已存在 MODULE_IMPORT_NS，跳过"
+            echo "module.h 已含 MODULE_IMPORT_NS，跳过"
           else
             printf '\n#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\n' >> "$HDR"
-            echo "已为 4.19 补上 MODULE_IMPORT_NS 兼容定义"
+            echo "已补 MODULE_IMPORT_NS = no-op"
           fi
-          echo "--- module.h tail ---"
+
+          echo "== 2) 缺失头文件 shim =="
+          # 4.19 没有 5.4+ 才引入的 linux/{pgtable,minmax,hex,unaligned}.h，
+          # 而 SukiSU 直接 include 了它们 -> "fatal error: file not found"。
+          # 为每个缺失头生成一个转发 shim，指向 4.19 里的等价旧头。
+          make_shim() {   # $1=头文件名 $2=转发目标 $3=include guard
+            local name="$1" target="$2" guard="$3"
+            if [ -f "include/linux/$name" ]; then
+              echo "include/linux/$name 已存在，跳过"
+              return 0
+            fi
+            {
+              echo "/* 4.19 compat shim (CI 自动生成) */"
+              echo "#ifndef $guard"
+              echo "#define $guard"
+              echo "#include $target"
+              echo "#endif"
+            } > "include/linux/$name"
+            echo "已生成 include/linux/$name -> $target"
+          }
+          make_shim pgtable.h   '<asm/pgtable.h>'   _LINUX_PGTABLE_COMPAT_H
+          make_shim minmax.h    '<linux/kernel.h>'  _LINUX_MINMAX_COMPAT_H
+          make_shim hex.h       '<linux/kernel.h>'  _LINUX_HEX_COMPAT_H
+          make_shim unaligned.h '<asm/unaligned.h>' _LINUX_UNALIGNED_COMPAT_H
+
+          echo "--- 结果 ---"
           tail -n 6 "$HDR"
-          echo "--- MODULE_IMPORT_NS 引用点 ---"
-          grep -rn 'MODULE_IMPORT_NS' drivers/kernelsu || true
+          for f in pgtable.h minmax.h hex.h unaligned.h; do
+            echo "--- include/linux/$f ---"
+            cat "include/linux/$f"
+          done
 
       - name: Apply performance / compatibility defconfig fragment
         env:
