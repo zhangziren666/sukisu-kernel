@@ -1,7 +1,7 @@
 name: Build SukiSU-Ultra Kernel (OPPO A32/A53 · sm4250 · non-GKI 4.19)
 
 # 说明：
-#   云端编译 OPPO sm4250 (Bengal) Android 12 内核源码 + SukiSU-Ultra，
+#   1云端编译 OPPO sm4250 (Bengal) Android 12 内核源码 + SukiSU-Ultra，
 #   产出 Image.gz / vmlinux / System.map。
 #   内核源码与 defconfig 均为官方 OPPO 源：分支 oppo/sm4250_s_12.1_f19
 #   本仓库只做「拉源码 → 集成 SukiSU → 追加性能优化 → 编译 → 上传 artifact」。
