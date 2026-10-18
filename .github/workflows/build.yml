@@ -101,6 +101,26 @@ jobs:
           tail -n 2 drivers/Makefile
           grep -n "kernelsu" drivers/Kconfig
 
+      - name: Patch 4.19 compat (MODULE_IMPORT_NS)
+        working-directory: kernel/msm-4.19
+        run: |
+          set -e
+          # Linux 4.19 没有 symbol-namespace 机制，MODULE_IMPORT_NS 宏不存在。
+          # SukiSU-Ultra 的 core/init.c 无条件使用它，会报：
+          #   error: a parameter list without types is only allowed in a function definition
+          # 在 module.h 末尾补一个 no-op 定义（#ifndef 包裹，重复包含安全）。
+          HDR=include/linux/module.h
+          if grep -Eq 'define[[:space:]]+MODULE_IMPORT_NS' "$HDR"; then
+            echo "module.h 已存在 MODULE_IMPORT_NS，跳过"
+          else
+            printf '\n#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\n' >> "$HDR"
+            echo "已为 4.19 补上 MODULE_IMPORT_NS 兼容定义"
+          fi
+          echo "--- module.h tail ---"
+          tail -n 6 "$HDR"
+          echo "--- MODULE_IMPORT_NS 引用点 ---"
+          grep -rn 'MODULE_IMPORT_NS' drivers/kernelsu || true
+
       - name: Apply performance / compatibility defconfig fragment
         env:
           FRAGMENT: |
